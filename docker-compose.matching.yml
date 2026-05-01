@@ -1,0 +1,88 @@
+# docker-compose.matching.yml
+# Servicios necesarios para desarrollo local del matching-service.
+# Uso: docker compose -f docker-compose.matching.yml up -d
+#
+# Esto levanta Elasticsearch + RabbitMQ + matching-service.
+# Para integrarlo al compose principal de Adopti, Eduard debe copiar
+# los servicios "elasticsearch" y "matching-service" al compose raíz.
+
+version: "3.9"
+
+services:
+  # ── Elasticsearch ────────────────────────────────────
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+    container_name: adopti-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms256m -Xmx512m
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsSL http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+    networks:
+      - adopti-net
+
+  # ── RabbitMQ ─────────────────────────────────────────
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: adopti-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: adopti
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-password}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - adopti-net
+
+  # ── Matching Service ─────────────────────────────────
+  matching-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: adopti-matching-service
+    ports:
+      - "8083:8083"
+    environment:
+      ELASTICSEARCH_HOST: elasticsearch
+      ELASTICSEARCH_PORT: 9200
+      ELASTICSEARCH_SCHEME: http
+      ELASTICSEARCH_INDEX: pets
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: adopti
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-password}
+      MATCH_SCORE_THRESHOLD: 0.3
+      MATCH_MAX_DAYS: 90
+      MATCH_MAX_RESULTS: 20
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - adopti-net
+
+volumes:
+  es-data:
+  rabbitmq-data:
+
+networks:
+  adopti-net:
+    driver: bridge

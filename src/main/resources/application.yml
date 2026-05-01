@@ -1,0 +1,41 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: matching-service
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:adopti}
+    password: ${RABBITMQ_PASSWORD:password}
+
+elasticsearch:
+  host: ${ELASTICSEARCH_HOST:localhost}
+  port: ${ELASTICSEARCH_PORT:9200}
+  scheme: ${ELASTICSEARCH_SCHEME:http}
+  index-name: ${ELASTICSEARCH_INDEX:pets}
+
+matching:
+  # Minimum score threshold (0.0 - 1.0) for a match to be considered
+  score-threshold: ${MATCH_SCORE_THRESHOLD:0.3}
+  # Maximum age of reports to consider for matching (in days)
+  max-days: ${MATCH_MAX_DAYS:90}
+  # Maximum number of matches to return per query
+  max-results: ${MATCH_MAX_RESULTS:20}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.adopti: DEBUG
+    co.elastic.clients: WARN
+    org.springframework.amqp: INFO
