@@ -5,6 +5,10 @@ spring:
   application:
     name: matching-service
 
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}

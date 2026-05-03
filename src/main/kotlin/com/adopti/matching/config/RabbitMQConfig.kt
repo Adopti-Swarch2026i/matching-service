@@ -1,6 +1,7 @@
 package com.adopti.matching.config
 
 import org.springframework.amqp.core.*
+import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory
 import org.springframework.amqp.rabbit.connection.ConnectionFactory
 import org.springframework.amqp.rabbit.core.RabbitTemplate
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter
@@ -18,14 +19,22 @@ class RabbitMQConfig {
 
         // Queue names
         const val MATCHING_QUEUE = "matching.queue"
-        const val MATCHING_DLQ = "matching.queue.dlq"
+        // events.md §1 define una DLQ unificada `adopti.dlq` con bind `#`
+        // sobre el DLX. Este servicio la declara para que el contrato del
+        // sistema (no solo de matching) tenga un destino observable cuando
+        // un mensaje muere en cualquier consumer.
+        const val UNIFIED_DLQ = "adopti.dlq"
 
         // Routing keys this service listens to
         const val PET_REPORT_CREATED = "pet.report.created"
         const val PET_REPORT_UPDATED = "pet.report.updated"
+        const val PET_REPORT_DELETED = "pet.report.deleted"
 
         // Routing key this service publishes
         const val MATCH_FOUND = "match.found"
+
+        // events.md §1: x-message-ttl=86400000 (24h) en queues principales.
+        const val QUEUE_TTL_MS: Long = 86_400_000L
     }
 
     // ── Exchanges ──────────────────────────────────────────
@@ -53,14 +62,18 @@ class RabbitMQConfig {
         return QueueBuilder
             .durable(MATCHING_QUEUE)
             .withArgument("x-dead-letter-exchange", DLX_EXCHANGE)
-            .withArgument("x-dead-letter-routing-key", "matching.dlq")
+            .withArgument("x-message-ttl", QUEUE_TTL_MS)
             .build()
     }
 
+    /**
+     * DLQ unificada (events.md §1). Cualquier mensaje muerto que enrute al
+     * DLX cae aquí gracias al bind `#`.
+     */
     @Bean
-    fun matchingDlq(): Queue {
+    fun unifiedDlq(): Queue {
         return QueueBuilder
-            .durable(MATCHING_DLQ)
+            .durable(UNIFIED_DLQ)
             .build()
     }
 
@@ -83,18 +96,26 @@ class RabbitMQConfig {
     }
 
     @Bean
-    fun bindDlq(matchingDlq: Queue, dlxExchange: TopicExchange): Binding {
+    fun bindDeleted(matchingQueue: Queue, eventsExchange: TopicExchange): Binding {
         return BindingBuilder
-            .bind(matchingDlq)
+            .bind(matchingQueue)
+            .to(eventsExchange)
+            .with(PET_REPORT_DELETED)
+    }
+
+    @Bean
+    fun bindUnifiedDlq(unifiedDlq: Queue, dlxExchange: TopicExchange): Binding {
+        return BindingBuilder
+            .bind(unifiedDlq)
             .to(dlxExchange)
-            .with("matching.dlq")
+            .with("#")
     }
 
     // ── Converter & Template ──────────────────────────────
 
     @Bean
-    fun jsonMessageConverter(): MessageConverter {
-        return Jackson2JsonMessageConverter()
+    fun jsonMessageConverter(objectMapper: com.fasterxml.jackson.databind.ObjectMapper): MessageConverter {
+        return Jackson2JsonMessageConverter(objectMapper)
     }
 
     @Bean
@@ -105,5 +126,22 @@ class RabbitMQConfig {
         val template = RabbitTemplate(connectionFactory)
         template.messageConverter = messageConverter
         return template
+    }
+
+    /**
+     * events.md §5.1 prohíbe `basic_nack(requeue=true)` (loop). Spring AMQP
+     * por defecto re-encola los mensajes que lanzan excepción; aquí lo
+     * desactivamos para que el broker enrute al DLX.
+     */
+    @Bean
+    fun rabbitListenerContainerFactory(
+        connectionFactory: ConnectionFactory,
+        messageConverter: MessageConverter
+    ): SimpleRabbitListenerContainerFactory {
+        val factory = SimpleRabbitListenerContainerFactory()
+        factory.setConnectionFactory(connectionFactory)
+        factory.setMessageConverter(messageConverter)
+        factory.setDefaultRequeueRejected(false)
+        return factory
     }
 }

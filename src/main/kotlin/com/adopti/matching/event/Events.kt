@@ -34,7 +34,7 @@ data class PetReportCreatedEvent(
 data class PetReportUpdatedEvent(
     @JsonProperty("petId") val petId: Int,
     @JsonProperty("reportId") val reportId: Int,
-    @JsonProperty("ownerId") val ownerId: String,
+    @JsonProperty("ownerId") val ownerId: String? = null,
     @JsonProperty("type") val type: String? = null,
     @JsonProperty("breed") val breed: String? = null,
     @JsonProperty("color") val color: String? = null,
@@ -52,14 +52,38 @@ data class PetReportUpdatedEvent(
 
 /**
  * Event published to RabbitMQ when a potential match is found.
+ *
+ * Body == data del schema (events.md §7.2). Los metadatos `eventId` y
+ * `eventTimestamp` viajan SOLO en headers AMQP, no en el body.
  */
 data class MatchFoundEvent(
-    val eventId: String,
-    val eventTimestamp: Instant = Instant.now(),
     val lostPetId: Int,
     val lostReportId: Int,
+    val lostOwnerId: String,
     val foundPetId: Int,
     val foundReportId: Int,
+    val foundOwnerId: String,
     val score: Double,
-    val criteria: Map<String, Boolean>
+    val criteria: MatchCriteriaPayload,
+    val matchedAt: Instant
+)
+
+/**
+ * Mirror del schema §4.6 `criteria`: species/breed/color/city (string|null).
+ * Los flags booleanos del MatchCriteria interno NO van aquí — los consumers
+ * que necesiten ese detalle pueden recalcularlo a partir de los valores.
+ */
+data class MatchCriteriaPayload(
+    val species: String? = null,
+    val breed: String? = null,
+    val color: String? = null,
+    val city: String? = null
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class PetReportDeletedEvent(
+    val petId: Int,
+    val reportId: Int,
+    val ownerId: String? = null,
+    val deletedAt: Instant? = null
 )

@@ -2,6 +2,7 @@ package com.adopti.matching.service
 
 import com.adopti.matching.model.MatchCriteria
 import com.adopti.matching.model.MatchResult
+import com.adopti.matching.model.MatchSnapshot
 import com.adopti.matching.model.PetDocument
 import mu.KotlinLogging
 import org.springframework.beans.factory.annotation.Value
@@ -54,7 +55,8 @@ class MatchingEngine(
             city = document.city,
             description = document.description,
             maxDays = maxDays,
-            maxResults = maxResults
+            maxResults = maxResults,
+            excludeReportId = document.reportId
         )
 
         if (candidates.isEmpty()) {
@@ -62,33 +64,71 @@ class MatchingEngine(
             return emptyList()
         }
 
-        // Normalize scores and build match results
-        val maxScore = candidates.maxOf { it.second }
-        if (maxScore == 0.0) return emptyList()
-
+        // events.md §4.6 exige score ∈ [0,1] con semántica ABSOLUTA. Por eso
+        // calculamos el score a partir de los criterios efectivamente
+        // satisfechos (weights fijos que suman 1.0), no normalizando contra
+        // el `_score` máximo del lote — que produciría 1.0 al mejor candidato
+        // siempre, neutralizando el umbral.
         return candidates
-            .map { (candidate, rawScore) ->
-                val normalizedScore = rawScore / maxScore
+            .map { (candidate, _) ->
                 val criteria = buildCriteria(document, candidate)
+                val absoluteScore = computeAbsoluteScore(criteria)
 
-                val (lostPetId, lostReportId, foundPetId, foundReportId) =
-                    if (document.status == "lost") {
-                        listOf(document.petId, document.reportId, candidate.petId, candidate.reportId)
-                    } else {
-                        listOf(candidate.petId, candidate.reportId, document.petId, document.reportId)
-                    }
+                val lostPetId: Int
+                val lostReportId: Int
+                val foundPetId: Int
+                val foundReportId: Int
+                val lostOwnerId: String
+                val foundOwnerId: String
+
+                if (document.status == "lost") {
+                    lostPetId = document.petId
+                    lostReportId = document.reportId
+                    lostOwnerId = document.ownerId
+                    foundPetId = candidate.petId
+                    foundReportId = candidate.reportId
+                    foundOwnerId = candidate.ownerId
+                } else {
+                    lostPetId = candidate.petId
+                    lostReportId = candidate.reportId
+                    lostOwnerId = candidate.ownerId
+                    foundPetId = document.petId
+                    foundReportId = document.reportId
+                    foundOwnerId = document.ownerId
+                }
 
                 MatchResult(
                     lostPetId = lostPetId,
                     lostReportId = lostReportId,
+                    lostOwnerId = lostOwnerId,
                     foundPetId = foundPetId,
                     foundReportId = foundReportId,
-                    score = normalizedScore,
-                    criteria = criteria
+                    foundOwnerId = foundOwnerId,
+                    score = absoluteScore,
+                    criteria = criteria,
+                    snapshot = MatchSnapshot(
+                        species = document.type.takeIf { it.isNotBlank() }
+                            ?: candidate.type.takeIf { it.isNotBlank() },
+                        breed = document.breed ?: candidate.breed,
+                        color = document.color ?: candidate.color,
+                        city = document.city.takeIf { it.isNotBlank() }
+                            ?: candidate.city.takeIf { it.isNotBlank() }
+                    )
                 )
             }
             .filter { it.score >= scoreThreshold }
             .sortedByDescending { it.score }
+    }
+
+    private fun computeAbsoluteScore(criteria: MatchCriteria): Double {
+        // Weights suman 1.0 (events.md §4.6 score ∈ [0,1]).
+        var score = 0.0
+        if (criteria.sameSpecies) score += 0.30
+        if (criteria.sameCity) score += 0.25
+        if (criteria.similarBreed) score += 0.25
+        if (criteria.similarColor) score += 0.15
+        if (criteria.descriptionMatch) score += 0.05
+        return score.coerceIn(0.0, 1.0)
     }
 
     /**

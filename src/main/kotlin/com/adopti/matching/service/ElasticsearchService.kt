@@ -1,7 +1,10 @@
 package com.adopti.matching.service
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient
+import co.elastic.clients.elasticsearch._types.Refresh
+import co.elastic.clients.elasticsearch._types.SortOrder
 import co.elastic.clients.elasticsearch._types.mapping.*
+import co.elastic.clients.elasticsearch.core.DeleteRequest
 import co.elastic.clients.elasticsearch.core.IndexRequest
 import co.elastic.clients.elasticsearch.core.SearchRequest
 import co.elastic.clients.elasticsearch.core.search.Hit
@@ -100,14 +103,29 @@ class ElasticsearchService(
     fun indexPetDocument(document: PetDocument) {
         val docId = "report_${document.reportId}"
 
+        // refresh=wait_for: garantiza que el siguiente search ve este doc.
+        // Sin esto el matching engine puede no encontrar al recién indexado
+        // si dos eventos llegan en sucesión rápida (events.md riesgo §6).
         esClient.index(IndexRequest.Builder<PetDocument>()
             .index(indexName)
             .id(docId)
             .document(document)
+            .refresh(Refresh.WaitFor)
             .build()
         )
 
         logger.debug { "Indexed document $docId in index $indexName" }
+    }
+
+    fun deleteByReportId(reportId: Int) {
+        val docId = "report_$reportId"
+        esClient.delete(DeleteRequest.Builder()
+            .index(indexName)
+            .id(docId)
+            .refresh(Refresh.WaitFor)
+            .build()
+        )
+        logger.info { "Deleted document $docId from index $indexName" }
     }
 
     /**
@@ -131,7 +149,8 @@ class ElasticsearchService(
         city: String,
         description: String?,
         maxDays: Int,
-        maxResults: Int
+        maxResults: Int,
+        excludeReportId: Int? = null
     ): List<Pair<PetDocument, Double>> {
         val searchRequest = SearchRequest.Builder()
             .index(indexName)
@@ -145,10 +164,21 @@ class ElasticsearchService(
                         }
                     }
 
-                    // MUST: same species
+                    // MUST: same species (plan §6.4)
                     bool.must { must ->
                         must.term { t ->
                             t.field("type").value(type)
+                        }
+                    }
+
+                    // MUST: same city (plan §6.4 — antes era SHOULD; permitía
+                    // matches falsos por solo coincidir parcialmente en otros
+                    // campos en ciudades distintas).
+                    if (city.isNotBlank()) {
+                        bool.must { must ->
+                            must.match { m ->
+                                m.field("city").query(city)
+                            }
                         }
                     }
 
@@ -157,6 +187,18 @@ class ElasticsearchService(
                         must.range { r ->
                             r.field("createdAt")
                                 .gte(co.elastic.clients.json.JsonData.of("now-${maxDays}d"))
+                        }
+                    }
+
+                    // MUST_NOT: el propio reporte (defensa profunda;
+                    // el filtro de status opuesto ya impide self-match).
+                    // El cliente Elasticsearch Java no acepta Int en .value();
+                    // convertimos a Long para que matchee la sobrecarga.
+                    if (excludeReportId != null) {
+                        bool.mustNot { mn ->
+                            mn.term { t ->
+                                t.field("reportId").value(excludeReportId.toLong())
+                            }
                         }
                     }
 
@@ -178,13 +220,6 @@ class ElasticsearchService(
                         }
                     }
 
-                    // SHOULD: same city (boosts score significantly)
-                    bool.should { should ->
-                        should.match { m ->
-                            m.field("city").query(city).boost(4.0f)
-                        }
-                    }
-
                     // SHOULD: description similarity
                     if (!description.isNullOrBlank()) {
                         bool.should { should ->
@@ -193,9 +228,6 @@ class ElasticsearchService(
                             }
                         }
                     }
-
-                    // Need at least 1 SHOULD clause to match
-                    bool.minimumShouldMatch("1")
 
                     bool
                 }
@@ -301,6 +333,28 @@ class ElasticsearchService(
             response.source()
         } catch (e: Exception) {
             logger.warn { "Document report_$reportId not found in index $indexName" }
+            null
+        }
+    }
+
+    /**
+     * Retrieves the most recent pet document for a given petId. Used by
+     * the REST endpoint when the caller does not know the reportId.
+     */
+    fun getLatestByPetId(petId: Int): PetDocument? {
+        return try {
+            val req = SearchRequest.Builder()
+                .index(indexName)
+                .size(1)
+                .query { q ->
+                    q.term { t -> t.field("petId").value(petId.toLong()) }
+                }
+                .sort { s -> s.field { f -> f.field("createdAt").order(SortOrder.Desc) } }
+                .build()
+            val response = esClient.search(req, PetDocument::class.java)
+            response.hits().hits().firstOrNull()?.source()
+        } catch (e: Exception) {
+            logger.warn(e) { "Failed to lookup latest report for petId=$petId" }
             null
         }
     }

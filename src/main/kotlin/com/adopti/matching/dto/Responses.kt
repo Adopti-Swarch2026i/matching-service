@@ -11,19 +11,31 @@ import com.adopti.matching.model.PetDocument
 data class MatchResponse(
     val lostPetId: Int,
     val lostReportId: Int,
+    val lostOwnerId: String,
     val foundPetId: Int,
     val foundReportId: Int,
+    val foundOwnerId: String,
     val score: Double,
-    val criteria: MatchCriteria
+    val criteria: MatchCriteria,
+    val species: String?,
+    val breed: String?,
+    val color: String?,
+    val city: String?
 ) {
     companion object {
         fun from(matchResult: MatchResult) = MatchResponse(
             lostPetId = matchResult.lostPetId,
             lostReportId = matchResult.lostReportId,
+            lostOwnerId = matchResult.lostOwnerId,
             foundPetId = matchResult.foundPetId,
             foundReportId = matchResult.foundReportId,
+            foundOwnerId = matchResult.foundOwnerId,
             score = matchResult.score,
-            criteria = matchResult.criteria
+            criteria = matchResult.criteria,
+            species = matchResult.snapshot.species,
+            breed = matchResult.snapshot.breed,
+            color = matchResult.snapshot.color,
+            city = matchResult.snapshot.city
         )
     }
 }

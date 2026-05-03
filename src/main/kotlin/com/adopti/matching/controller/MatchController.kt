@@ -25,33 +25,38 @@ class MatchController(
 ) {
 
     /**
-     * Get potential matches for a specific pet report.
+     * Get potential matches for a specific pet.
      *
-     * The petId in the path identifies the pet, and reportId (required query param)
-     * identifies which specific report to match against.
+     * Si se pasa `reportId` se busca exactamente ese reporte; si no, se
+     * resuelve el reporte más reciente del `petId`. Esto evita acoplar al
+     * cliente con la convención interna de IDs cuando solo conoce la
+     * mascota.
      */
     @GetMapping("/{petId}")
     fun getMatches(
         @PathVariable petId: Int,
-        @RequestParam reportId: Int
+        @RequestParam(required = false) reportId: Int?
     ): ResponseEntity<Any> {
-        logger.info { "GET /api/matches/$petId?reportId=$reportId" }
+        logger.info { "GET /api/matches/$petId reportId=$reportId" }
 
-        // Verify the document exists
-        val document = elasticsearchService.getByReportId(reportId)
-            ?: return ResponseEntity.status(404).body(
-                ErrorResponse(
-                    error = "Not Found",
-                    message = "Report $reportId not found in search index. It may not have been indexed yet.",
-                    status = 404
-                )
+        val document = if (reportId != null) {
+            elasticsearchService.getByReportId(reportId)
+        } else {
+            elasticsearchService.getLatestByPetId(petId)
+        } ?: return ResponseEntity.status(404).body(
+            ErrorResponse(
+                error = "Not Found",
+                message = "No indexed report found for petId=$petId" +
+                    (reportId?.let { " (reportId=$it)" } ?: ""),
+                status = 404
             )
+        )
 
         val matches = matchingEngine.findMatches(document)
 
         val response = MatchListResponse(
             petId = petId,
-            reportId = reportId,
+            reportId = document.reportId,
             totalMatches = matches.size,
             matches = matches.map { MatchResponse.from(it) }
         )
