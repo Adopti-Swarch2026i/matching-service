@@ -79,7 +79,8 @@ class PetReportConsumer(
             if (!eventId.isNullOrBlank()) {
                 processedEventIds.remove(eventId)
             }
-            logger.error(e) { "Error processing event routingKey=$routingKey" }
+            val sanitizedMessage = e.message?.replace(Regex("(://)([^:]+):([^@]+)@"), "$1$2:***REDACTED***@")
+            logger.error { "Error processing event routingKey=$routingKey: $sanitizedMessage" }
             // Sin requeue (RabbitMQConfig.rabbitListenerContainerFactory) → DLX.
             throw e
         }
