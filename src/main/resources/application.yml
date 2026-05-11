@@ -1,5 +1,13 @@
 server:
-  port: 8083
+  port: ${SERVER_PORT:8443}
+  ssl:
+    enabled: true
+    key-store: ${SSL_KEYSTORE:/app/certs/keystore.p12}
+    key-store-password: ${SSL_KEYSTORE_PASSWORD:changeit}
+    key-store-type: PKCS12
+    key-alias: matching-service
+    protocol: TLS
+    enabled-protocols: TLSv1.2,TLSv1.3
 
 spring:
   application:
@@ -11,14 +19,23 @@ spring:
 
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
-    port: ${RABBITMQ_PORT:5672}
+    port: ${RABBITMQ_PORT:5671}
     username: ${RABBITMQ_USER:adopti}
     password: ${RABBITMQ_PASSWORD:password}
+    ssl:
+      enabled: true
+      algorithm: TLSv1.3
+      trust-store: file:/app/certs/truststore.jks
+      trust-store-password: ${SSL_TRUSTSTORE_PASSWORD:changeit}
+      verify-hostname: true
 
 elasticsearch:
   host: ${ELASTICSEARCH_HOST:localhost}
   port: ${ELASTICSEARCH_PORT:9200}
-  scheme: ${ELASTICSEARCH_SCHEME:http}
+  scheme: ${ELASTICSEARCH_SCHEME:https}
+  username: ${ELASTICSEARCH_USERNAME:elastic}
+  password: ${ELASTICSEARCH_PASSWORD:}
+  ca-path: ${ELASTICSEARCH_CA_PATH:/app/certs/ca.crt}
   index-name: ${ELASTICSEARCH_INDEX:pets}
 
 matching:
