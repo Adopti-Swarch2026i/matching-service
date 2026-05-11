@@ -19,6 +19,9 @@ FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
 
+# Install curl for HTTPS healthchecks (BusyBox wget does not support TLS)
+RUN apk add --no-cache curl
+
 # Create non-root user
 RUN addgroup -S adopti && adduser -S adopti -G adopti
 
