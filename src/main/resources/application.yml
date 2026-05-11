@@ -8,6 +8,10 @@ server:
     key-alias: matching-service
     protocol: TLS
     enabled-protocols: TLSv1.2,TLSv1.3
+    client-auth: need
+    trust-store: ${SSL_TRUSTSTORE:/app/certs/truststore.jks}
+    trust-store-password: ${SSL_TRUSTSTORE_PASSWORD:changeit}
+    trust-store-type: JKS
 
 spring:
   application:
