@@ -19,7 +19,6 @@ private val logger = KotlinLogging.logger {}
  */
 @RestController
 @RequestMapping("/api/search")
-@CrossOrigin(origins = ["*"])
 class SearchController(
     private val elasticsearchService: ElasticsearchService
 ) {

@@ -4,7 +4,6 @@ import com.adopti.matching.dto.HealthResponse
 import co.elastic.clients.elasticsearch.ElasticsearchClient
 import mu.KotlinLogging
 import org.springframework.http.ResponseEntity
-import org.springframework.web.bind.annotation.CrossOrigin
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RestController
 
@@ -14,7 +13,6 @@ private val logger = KotlinLogging.logger {}
  * Health check endpoint.
  */
 @RestController
-@CrossOrigin(origins = ["*"])
 class HealthController(
     private val esClient: ElasticsearchClient
 ) {

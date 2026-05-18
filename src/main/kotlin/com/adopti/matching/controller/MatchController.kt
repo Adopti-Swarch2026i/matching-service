@@ -18,7 +18,6 @@ private val logger = KotlinLogging.logger {}
  */
 @RestController
 @RequestMapping("/api/matches")
-@CrossOrigin(origins = ["*"])
 class MatchController(
     private val matchingEngine: MatchingEngine,
     private val elasticsearchService: ElasticsearchService

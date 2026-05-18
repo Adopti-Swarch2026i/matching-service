@@ -15,6 +15,12 @@ spring:
     username: ${RABBITMQ_USER:adopti}
     password: ${RABBITMQ_PASSWORD:password}
 
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${JWT_ISSUER_URI:https://securetoken.google.com/adoptiswarch-dc4da}
+
 elasticsearch:
   host: ${ELASTICSEARCH_HOST:localhost}
   port: ${ELASTICSEARCH_PORT:9200}
