@@ -63,4 +63,5 @@ logging:
   level:
     com.adopti: DEBUG
     co.elastic.clients: WARN
-    org.springframework.amqp: INFO
+    org.springframework.amqp: WARN
+    org.springframework.amqp.rabbit.connection: WARN
