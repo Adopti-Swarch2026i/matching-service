@@ -23,8 +23,9 @@ class HealthController(
             val info = esClient.info()
             "connected (version ${info.version().number()})"
         } catch (e: Exception) {
-            logger.warn(e) { "Elasticsearch health check failed" }
-            "disconnected: ${e.message}"
+            val sanitizedMessage = e.message?.replace(Regex("(://)([^:]+):([^@]+)@"), "$1$2:***REDACTED***@")
+            logger.warn { "Elasticsearch health check failed: $sanitizedMessage" }
+            "disconnected: $sanitizedMessage"
         }
 
         val response = HealthResponse(

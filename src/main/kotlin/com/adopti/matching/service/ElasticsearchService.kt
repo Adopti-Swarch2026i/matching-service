@@ -91,7 +91,8 @@ class ElasticsearchService(
                 logger.info { "Index '$indexName' already exists, skipping creation" }
             }
         } catch (e: Exception) {
-            logger.error(e) { "Failed to initialize Elasticsearch index '$indexName'" }
+            val sanitizedMessage = e.message?.replace(Regex("(://)([^:]+):([^@]+)@"), "$1$2:***REDACTED***@")
+            logger.error { "Failed to initialize Elasticsearch index '$indexName': $sanitizedMessage" }
             // Don't crash the app — ES might not be ready yet on first boot
         }
     }
@@ -354,7 +355,8 @@ class ElasticsearchService(
             val response = esClient.search(req, PetDocument::class.java)
             response.hits().hits().firstOrNull()?.source()
         } catch (e: Exception) {
-            logger.warn(e) { "Failed to lookup latest report for petId=$petId" }
+            val sanitizedMessage = e.message?.replace(Regex("(://)([^:]+):([^@]+)@"), "$1$2:***REDACTED***@")
+            logger.warn { "Failed to lookup latest report for petId=$petId: $sanitizedMessage" }
             null
         }
     }
